@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: oracle-apex-mcp
+    env: node
+    region: frankfurt  # możesz zmienić np. na oregon, virginia, singapore
+    plan: free
+    branch: main
+    buildCommand: "npm install"
+    startCommand: "npm start"
+    autoDeploy: true
+    envVars:
+      - key: APEX_USERNAME
+        sync: false
+      - key: APEX_PASSWORD
+        sync: false
