@@ -52,13 +52,12 @@ async function fetchProducts(token) {
   });
 }
 
-// MCP endpoint: lista narzędzi
 app.get("/sse/tools/list", (req, res) => {
   res.json({
     tools: [
       {
         name: "getOracleProducts",
-        description: "Pobiera listę produktów z Oracle APEX",
+        description: "Pobiera listę produktów z Oracle APEX (wymaga autoryzacji Bearer).",
         inputSchema: { type: "object", properties: {} },
         outputSchema: {
           type: "object",
@@ -73,17 +72,22 @@ app.get("/sse/tools/list", (req, res) => {
                   cena: { type: "string" },
                   liczba_sprzedanych: { type: "string" },
                   url: { type: "string" }
-                },
-                required: ["nazwa", "ocena", "cena", "liczba_sprzedanych", "url"]
+                }
               }
             }
           },
           required: ["products"]
         }
       }
-    ]
+    ],
+    auth: {
+      type: "bearer",
+      header: "Authorization",
+      prefix: "Bearer"
+    }
   });
 });
+
 
 // --- MCP: Wywołanie narzędzia (z autoryzacją) ---
 app.post("/sse/tools/call", async (req, res) => {
