@@ -1,0 +1,16 @@
+{
+  "name": "oracle-apex-mcp",
+  "version": "1.0.0",
+  "description": "Secure MCP server for Oracle APEX REST API, deployable on Render.com",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-fetch": "^3.3.2"
+  }
+}
