@@ -85,17 +85,32 @@ app.get("/sse/tools/list", (req, res) => {
   });
 });
 
-// MCP endpoint: wywołanie narzędzia
+// --- MCP: Wywołanie narzędzia (z autoryzacją) ---
 app.post("/sse/tools/call", async (req, res) => {
   try {
-    const token = await getAccessToken();
-    const products = await fetchProducts(token);
+    // Sprawdzenie nagłówka autoryzacji
+    const authHeader = req.headers["authorization"];
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized: Missing Bearer token." });
+    }
+
+    const token = authHeader.split(" ")[1];
+    if (token !== process.env.MCP_API_KEY) {
+      return res.status(403).json({ error: "Forbidden: Invalid API key." });
+    }
+
+    // Po autoryzacji – pobranie danych z Oracle APEX
+    const apexToken = await getAccessToken();
+    const products = await fetchProducts(apexToken);
+
+    // Zwrócenie wyników
     res.json({ success: true, products });
   } catch (err) {
-    console.error("MCP Error:", err.message);
+    console.error("MCP Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 app.listen(PORT, () => {
   console.log(`MCP Server running on port ${PORT}`);
