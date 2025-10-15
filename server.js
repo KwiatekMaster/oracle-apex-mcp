@@ -13,6 +13,12 @@ const PORT = process.env.PORT || 10000;
 const TOKEN_URL = "https://zistvuimo5abwyl-microcrmdb.adb.eu-zurich-1.oraclecloudapps.com/ords/wksp_microcrm/oauth/token";
 const PRODUCTS_URL = "https://zistvuimo5abwyl-microcrmdb.adb.eu-zurich-1.oraclecloudapps.com/ords/wksp_microcrm/ali_products/get";
 
+app.use((req, res, next) => {
+  console.log(` ${req.method} ${req.path} [Auth: ${req.headers.authorization ? 'v' : 'x'}]`);
+  next();
+});
+
+
 // Uzyskaj token z Oracle APEX
 async function getAccessToken() {
   const basicAuth = Buffer.from(`${process.env.APEX_USERNAME}:${process.env.APEX_PASSWORD}`).toString("base64");
