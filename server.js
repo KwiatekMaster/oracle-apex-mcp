@@ -8,16 +8,30 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-const PORT = process.env.PORT || 10000;
-
-const TOKEN_URL = "https://zistvuimo5abwyl-microcrmdb.adb.eu-zurich-1.oraclecloudapps.com/ords/wksp_microcrm/oauth/token";
-const PRODUCTS_URL = "https://zistvuimo5abwyl-microcrmdb.adb.eu-zurich-1.oraclecloudapps.com/ords/wksp_microcrm/ali_products/get";
-
+// ✅ CORS fix — pozwala Agent Builderowi wysyłać Authorization headers
 app.use((req, res, next) => {
-  console.log(` ${req.method} ${req.path} [Auth: ${req.headers.authorization ? 'v' : 'x'}]`);
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
 
+const PORT = process.env.PORT || 10000;
+
+// --- Oracle APEX REST endpoints ---
+const TOKEN_URL = "https://zistvuimo5abwyl-microcrmdb.adb.eu-zurich-1.oraclecloudapps.com/ords/wksp_microcrm/oauth/token";
+const PRODUCTS_URL = "https://zistvuimo5abwyl-microcrmdb.adb.eu-zurich-1.oraclecloudapps.com/ords/wksp_microcrm/ali_products/get";
+
+// --- Logowanie zapytań ---
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} | ${req.method} ${req.path} [Auth: ${req.headers.authorization ? '✅' : '❌'}]`);
+  next();
+});
+
+// ============================================
+// 🔹  PRODUKCYJNY MCP: Oracle APEX
+// ============================================
 
 // Uzyskaj token z Oracle APEX
 async function getAccessToken() {
@@ -58,6 +72,7 @@ async function fetchProducts(token) {
   });
 }
 
+// --- MCP: Lista narzędzi ---
 app.get("/sse/tools/list", (req, res) => {
   res.json({
     tools: [
@@ -94,11 +109,9 @@ app.get("/sse/tools/list", (req, res) => {
   });
 });
 
-
 // --- MCP: Wywołanie narzędzia (z autoryzacją) ---
 app.post("/sse/tools/call", async (req, res) => {
   try {
-    // Sprawdzenie nagłówka autoryzacji
     const authHeader = req.headers["authorization"];
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Unauthorized: Missing Bearer token." });
@@ -109,11 +122,9 @@ app.post("/sse/tools/call", async (req, res) => {
       return res.status(403).json({ error: "Forbidden: Invalid API key." });
     }
 
-    // Po autoryzacji – pobranie danych z Oracle APEX
     const apexToken = await getAccessToken();
     const products = await fetchProducts(apexToken);
 
-    // Zwrócenie wyników
     res.json({ success: true, products });
   } catch (err) {
     console.error("MCP Error:", err);
@@ -121,15 +132,19 @@ app.post("/sse/tools/call", async (req, res) => {
   }
 });
 
-// --- MCP: Endpoint diagnostyczny ---
+// ============================================
+// 🔹  DEBUG MCP: Testowanie połączeń i nagłówków
+// ============================================
+
+// --- Endpoint diagnostyczny ---
 app.all("/mcp/debug", (req, res) => {
-  const authHeader = req.headers["authorization"] || "brak nagłówka Authorization";
-  const origin = req.headers["origin"] || "brak nagłówka Origin";
+  const authHeader = req.headers["authorization"] || "❌ brak nagłówka Authorization";
+  const origin = req.headers["origin"] || "❌ brak nagłówka Origin";
   const method = req.method;
-  const contentType = req.headers["content-type"] || "brak Content-Type";
+  const contentType = req.headers["content-type"] || "❌ brak Content-Type";
 
   res.json({
-    message: "MCP Debug Endpoint działa poprawnie.",
+    message: "✅ MCP Debug Endpoint działa poprawnie.",
     method,
     origin,
     contentType,
@@ -138,20 +153,22 @@ app.all("/mcp/debug", (req, res) => {
     note: "Sprawdź, czy Authorization zawiera Twój Bearer token (np. 'Bearer supersekretnyklucz123')."
   });
 });
-// --- MCP: Fałszywy serwer diagnostyczny (dla Agent Buildera) ---
+
+// --- MCP: Lista narzędzi debugowych ---
 app.get("/mcp/tools/list", (req, res) => {
   res.json({
     tools: [
       {
-        name: "debugEndpoint",
-        description: "Zwraca szczegóły nagłówków i połączenia (debug MCP).",
+        name: "debugConnection",
+        description: "Zwraca szczegóły nagłówków i połączenia (diagnostyka MCP).",
         inputSchema: { type: "object", properties: {} },
         outputSchema: {
           type: "object",
           properties: {
             message: { type: "string" },
-            authorization_header: { type: "string" },
+            method: { type: "string" },
             origin: { type: "string" },
+            authorization_header: { type: "string" },
             headers: { type: "object" }
           },
           required: ["message"]
@@ -161,23 +178,28 @@ app.get("/mcp/tools/list", (req, res) => {
   });
 });
 
-// --- MCP: Debugowe narzędzie ---
+// --- MCP: Wywołanie narzędzia debugowego ---
 app.post("/mcp/tools/call", (req, res) => {
-  const authHeader = req.headers["authorization"] || " brak nagłówka Authorization";
-  const origin = req.headers["origin"] || " brak nagłówka Origin";
+  const authHeader = req.headers["authorization"] || "❌ brak nagłówka Authorization";
+  const origin = req.headers["origin"] || "❌ brak nagłówka Origin";
   const method = req.method;
   const headers = req.headers;
 
   res.json({
-    message: " MCP Debug tool działa poprawnie.",
-    authorization_header: authHeader,
-    origin,
+    message: "✅ MCP Debug tool działa poprawnie i przyjął żądanie.",
     method,
+    origin,
+    authorization_header: authHeader,
     headers
   });
 });
 
+// --- Endpoint główny ---
+app.get("/", (req, res) => {
+  res.send("✅ Oracle APEX MCP Server działa poprawnie i jest gotowy do połączenia z Agent Builderem.");
+});
 
+// --- Start serwera ---
 app.listen(PORT, () => {
-  console.log(`MCP Server running on port ${PORT}`);
+  console.log(`🚀 MCP Server running on port ${PORT}`);
 });
