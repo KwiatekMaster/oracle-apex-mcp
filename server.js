@@ -115,6 +115,24 @@ app.post("/sse/tools/call", async (req, res) => {
   }
 });
 
+// --- MCP: Endpoint diagnostyczny ---
+app.all("/mcp/debug", (req, res) => {
+  const authHeader = req.headers["authorization"] || "brak nagłówka Authorization";
+  const origin = req.headers["origin"] || "brak nagłówka Origin";
+  const method = req.method;
+  const contentType = req.headers["content-type"] || "brak Content-Type";
+
+  res.json({
+    message: "MCP Debug Endpoint działa poprawnie.",
+    method,
+    origin,
+    contentType,
+    authorization_header: authHeader,
+    headers: req.headers,
+    note: "Sprawdź, czy Authorization zawiera Twój Bearer token (np. 'Bearer supersekretnyklucz123')."
+  });
+});
+
 
 app.listen(PORT, () => {
   console.log(`MCP Server running on port ${PORT}`);
