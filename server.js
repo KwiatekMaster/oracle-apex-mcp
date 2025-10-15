@@ -138,6 +138,44 @@ app.all("/mcp/debug", (req, res) => {
     note: "Sprawdź, czy Authorization zawiera Twój Bearer token (np. 'Bearer supersekretnyklucz123')."
   });
 });
+// --- MCP: Fałszywy serwer diagnostyczny (dla Agent Buildera) ---
+app.get("/mcp/tools/list", (req, res) => {
+  res.json({
+    tools: [
+      {
+        name: "debugEndpoint",
+        description: "Zwraca szczegóły nagłówków i połączenia (debug MCP).",
+        inputSchema: { type: "object", properties: {} },
+        outputSchema: {
+          type: "object",
+          properties: {
+            message: { type: "string" },
+            authorization_header: { type: "string" },
+            origin: { type: "string" },
+            headers: { type: "object" }
+          },
+          required: ["message"]
+        }
+      }
+    ]
+  });
+});
+
+// --- MCP: Debugowe narzędzie ---
+app.post("/mcp/tools/call", (req, res) => {
+  const authHeader = req.headers["authorization"] || " brak nagłówka Authorization";
+  const origin = req.headers["origin"] || " brak nagłówka Origin";
+  const method = req.method;
+  const headers = req.headers;
+
+  res.json({
+    message: " MCP Debug tool działa poprawnie.",
+    authorization_header: authHeader,
+    origin,
+    method,
+    headers
+  });
+});
 
 
 app.listen(PORT, () => {
