@@ -10,25 +10,11 @@ app.use(express.json());
 app.use(cors());
 
 // ============================================
-// 🧱 Log Helper
+// 🧱 Logger Helper
 // ============================================
 function log(msg) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
 }
-
-// ============================================
-// 🔐 MCP API Key Middleware
-// ============================================
-app.use((req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const expectedKey = `Bearer ${process.env.MCP_API_KEY}`;
-
-  if (!authHeader || authHeader !== expectedKey) {
-    log(`⚠️ Unauthorized request: ${req.method} ${req.path}`);
-    return res.status(401).json({ error: "Unauthorized: Invalid or missing MCP API Key" });
-  }
-  next();
-});
 
 // ============================================
 // 🌍 CORS + Logging Middleware
@@ -37,14 +23,13 @@ app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-
   if (req.method === "OPTIONS") return res.sendStatus(200);
   log(`${req.method} ${req.path}`);
   next();
 });
 
 // ============================================
-// 🔹 Oracle APEX API Configuration
+// 🔹 Oracle APEX API Config
 // ============================================
 const TOKEN_URL = "https://zistvuimo5abwyl-microcrmdb.adb.eu-zurich-1.oraclecloudapps.com/ords/wksp_microcrm/oauth/token";
 const PRODUCTS_URL = "https://zistvuimo5abwyl-microcrmdb.adb.eu-zurich-1.oraclecloudapps.com/ords/wksp_microcrm/ali_products/get";
@@ -63,14 +48,9 @@ async function getAccessToken() {
     body: "grant_type=client_credentials",
   });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    log(`❌ Error fetching token: ${errText}`);
-    throw new Error("Failed to get access token from Oracle APEX");
-  }
-
+  if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
-  log("🔑 Access token retrieved successfully");
+  log("🔑 Oracle token fetched successfully");
   return data.access_token;
 }
 
@@ -97,7 +77,7 @@ async function fetchProducts(limit = 5) {
 }
 
 // ============================================
-// ⚙️ MCP: Handshake (SSE) — Agent Builder Fix
+// ⚙️ MCP Handshake – No Auth on /sse
 // ============================================
 app.get("/sse", async (req, res) => {
   res.set({
@@ -108,7 +88,7 @@ app.get("/sse", async (req, res) => {
 
   log("🔗 MCP client connected to /sse");
 
-  // 🟢 Ping event to force connection flush (Render + Cloudflare fix)
+  // Ping – force early flush for Render/Cloudflare
   res.write(":\n\n");
 
   setTimeout(() => {
@@ -145,11 +125,24 @@ app.get("/sse", async (req, res) => {
 });
 
 // ============================================
-// 🧠 MCP: Tool Execution Endpoint
+// 🔒 Auth middleware (only for tool calls)
 // ============================================
-app.post("/mcp", async (req, res) => {
+function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const expectedKey = `Bearer ${process.env.MCP_API_KEY}`;
+  if (!authHeader || authHeader !== expectedKey) {
+    log("🚫 Unauthorized call to /mcp");
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+}
+
+// ============================================
+// 🧠 MCP: Tool Execution Endpoint (secured)
+// ============================================
+app.post("/mcp", requireAuth, async (req, res) => {
   const { type, tool_name, arguments: args } = req.body;
-  log(`⚙️ MCP request received: ${type} (${tool_name})`);
+  log(`⚙️ MCP request: ${type} (${tool_name})`);
 
   try {
     if (type === "mcp_call" && tool_name === "fetch_products") {
@@ -162,7 +155,6 @@ app.post("/mcp", async (req, res) => {
     }
 
     if (type === "mcp_list_tools") {
-      log("📋 Returned tool list via /mcp");
       return res.json({
         type: "mcp_list_tools",
         tools: [
@@ -182,7 +174,7 @@ app.post("/mcp", async (req, res) => {
 });
 
 // ============================================
-// 🚀 Server Startup
+// 🚀 Start Server
 // ============================================
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => log(`✅ MCP server running on port ${PORT}`));
