@@ -10,38 +10,47 @@ app.use(express.json());
 app.use(cors());
 
 // ============================================
-// 🔐 Global middleware — autoryzacja przez MCP_API_KEY
+// 🧱 Log Helper
+// ============================================
+function log(msg) {
+  console.log(`[${new Date().toISOString()}] ${msg}`);
+}
+
+// ============================================
+// 🔐 MCP API Key Middleware
 // ============================================
 app.use((req, res, next) => {
   const authHeader = req.headers.authorization;
   const expectedKey = `Bearer ${process.env.MCP_API_KEY}`;
+
   if (!authHeader || authHeader !== expectedKey) {
-    console.warn("⚠️ Unauthorized request:", req.method, req.path);
+    log(`⚠️ Unauthorized request: ${req.method} ${req.path}`);
     return res.status(401).json({ error: "Unauthorized: Invalid or missing MCP API Key" });
   }
   next();
 });
 
 // ============================================
-// 🌍 CORS i logowanie
+// 🌍 CORS + Logging Middleware
 // ============================================
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  console.log(`${new Date().toISOString()} | ${req.method} ${req.path}`);
+
   if (req.method === "OPTIONS") return res.sendStatus(200);
+  log(`${req.method} ${req.path}`);
   next();
 });
 
 // ============================================
-// 🔹 Stałe dla Oracle APEX REST API
+// 🔹 Oracle APEX API Configuration
 // ============================================
 const TOKEN_URL = "https://zistvuimo5abwyl-microcrmdb.adb.eu-zurich-1.oraclecloudapps.com/ords/wksp_microcrm/oauth/token";
 const PRODUCTS_URL = "https://zistvuimo5abwyl-microcrmdb.adb.eu-zurich-1.oraclecloudapps.com/ords/wksp_microcrm/ali_products/get";
 
 // ============================================
-// 🔑 Funkcja pomocnicza: uzyskanie tokenu OAuth
+// 🔑 Get OAuth Access Token
 // ============================================
 async function getAccessToken() {
   const basicAuth = Buffer.from(`${process.env.APEX_USERNAME}:${process.env.APEX_PASSWORD}`).toString("base64");
@@ -55,16 +64,18 @@ async function getAccessToken() {
   });
 
   if (!res.ok) {
-    console.error("❌ Error fetching token:", await res.text());
+    const errText = await res.text();
+    log(`❌ Error fetching token: ${errText}`);
     throw new Error("Failed to get access token from Oracle APEX");
   }
 
   const data = await res.json();
+  log("🔑 Access token retrieved successfully");
   return data.access_token;
 }
 
 // ============================================
-// 📦 Funkcja: pobierz produkty z APEX REST API
+// 📦 Fetch Products from Oracle APEX
 // ============================================
 async function fetchProducts(limit = 5) {
   const token = await getAccessToken();
@@ -86,57 +97,64 @@ async function fetchProducts(limit = 5) {
 }
 
 // ============================================
-// ⚙️ MCP: lista narzędzi (handshake /sse)
+// ⚙️ MCP: Handshake (SSE) — Agent Builder Fix
 // ============================================
-app.get("/sse", (req, res) => {
+app.get("/sse", async (req, res) => {
   res.set({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
   });
 
-  console.log("🔗 MCP client connected to /sse");
+  log("🔗 MCP client connected to /sse");
 
-  const tools = [
-    {
-      name: "fetch_products",
-      description: "Pobiera listę produktów z Oracle APEX REST API",
-      input_schema: {
-        type: "object",
-        properties: {
-          limit: {
-            type: "integer",
-            description: "Liczba produktów do pobrania",
-            default: 5,
+  // 🟢 Ping event to force connection flush (Render + Cloudflare fix)
+  res.write(":\n\n");
+
+  setTimeout(() => {
+    const tools = [
+      {
+        name: "fetch_products",
+        description: "Pobiera listę produktów z Oracle APEX REST API",
+        input_schema: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "integer",
+              description: "Liczba produktów do pobrania",
+              default: 5,
+            },
           },
+          required: [],
         },
-        required: [],
       },
-    },
-  ];
+    ];
 
-  const payload = {
-    type: "mcp_list_tools",
-    tools,
-  };
+    const payload = {
+      type: "mcp_list_tools",
+      tools,
+    };
 
-  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    log("📤 Sent mcp_list_tools to MCP client");
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  }, 100);
 
   req.on("close", () => {
-    console.log("❌ MCP client disconnected");
+    log("❌ MCP client disconnected from /sse");
   });
 });
 
 // ============================================
-// 🧠 MCP: obsługa wywołań narzędzi (POST /mcp)
+// 🧠 MCP: Tool Execution Endpoint
 // ============================================
 app.post("/mcp", async (req, res) => {
   const { type, tool_name, arguments: args } = req.body;
-  console.log(`⚙️ MCP request: ${type} (${tool_name})`);
+  log(`⚙️ MCP request received: ${type} (${tool_name})`);
 
   try {
     if (type === "mcp_call" && tool_name === "fetch_products") {
       const result = await fetchProducts(args?.limit || 5);
+      log("✅ fetch_products executed successfully");
       return res.json({
         type: "mcp_call_result",
         result,
@@ -144,6 +162,7 @@ app.post("/mcp", async (req, res) => {
     }
 
     if (type === "mcp_list_tools") {
+      log("📋 Returned tool list via /mcp");
       return res.json({
         type: "mcp_list_tools",
         tools: [
@@ -157,13 +176,13 @@ app.post("/mcp", async (req, res) => {
 
     res.status(400).json({ error: "Unsupported MCP message type" });
   } catch (err) {
-    console.error("❌ MCP tool error:", err.message);
+    log(`❌ MCP tool error: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ============================================
-// 🚀 Start serwera (Render przypisuje port przez env.PORT)
+// 🚀 Server Startup
 // ============================================
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`✅ MCP server running on port ${PORT}`));
+app.listen(PORT, () => log(`✅ MCP server running on port ${PORT}`));
