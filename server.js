@@ -89,7 +89,7 @@ app.get("/sse", async (req, res) => {
   log("🔗 MCP client connected to /sse");
 
   // Ping – force early flush for Render/Cloudflare
-  res.write(":\n\n");
+  //res.write(":\n\n");
 
   setTimeout(() => {
     const tools = [
