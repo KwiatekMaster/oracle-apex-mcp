@@ -88,41 +88,41 @@ app.get("/sse", async (req, res) => {
 
   log("🔗 MCP client connected to /sse");
 
-  // Ping – force early flush for Render/Cloudflare
-  //res.write(":\n\n");
+  // 🔹 Ping (flush)
+  res.write(":\n\n");
 
-  setTimeout(() => {
-    const tools = [
-      {
-        name: "fetch_products",
-        description: "Pobiera listę produktów z Oracle APEX REST API",
-        input_schema: {
-          type: "object",
-          properties: {
-            limit: {
-              type: "integer",
-              description: "Liczba produktów do pobrania",
-              default: 5,
-            },
+  // 🔹 MCP tools (jednoliniowy JSON, bez \n w środku)
+  const tools = [
+    {
+      name: "fetch_products",
+      description: "Pobiera listę produktów z Oracle APEX REST API",
+      input_schema: {
+        type: "object",
+        properties: {
+          limit: {
+            type: "integer",
+            description: "Liczba produktów do pobrania",
+            default: 5,
           },
-          required: [],
         },
+        required: [],
       },
-    ];
+    },
+  ];
 
-    const payload = {
-      type: "mcp_list_tools",
-      tools,
-    };
+  // 👉 Używamy JSON.stringify bez spacji, żeby JSON był jednowierszowy
+  const payload = JSON.stringify({ type: "mcp_list_tools", tools });
 
-    log("📤 Sent mcp_list_tools to MCP client");
-    res.write(`data: ${JSON.stringify(payload)}\n\n`);
-  }, 100);
+  // 👉 Wysyłamy event SSE z czystym data: + \n\n
+  res.write(`data: ${payload}\n\n`);
+
+  log("📤 Sent MCP tool list (clean one-line JSON)");
 
   req.on("close", () => {
     log("❌ MCP client disconnected from /sse");
   });
 });
+
 
 // ============================================
 // 🔒 Auth middleware (only for tool calls)
